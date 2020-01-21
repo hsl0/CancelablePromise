@@ -5,6 +5,8 @@ const handleCallback = (resolve, reject, callback, r) => {
     reject(e);
   }
 };
+const promise = Symbol('promise');
+const oncancel = Symbol('canceler');
 
 export default class CancelablePromise {
   static all(iterable) {
@@ -31,14 +33,15 @@ export default class CancelablePromise {
     });
   }
 
-  constructor(executor) {
-    this._promise = new Promise(executor);
-    this._canceled = false;
+  constructor(executor, canceler) {
+    this[promise] = new Promise(executor);
+    this[oncancel] = canceler;
+    this.canceled = false;
   }
 
   then(success, error) {
     const p = new CancelablePromise((resolve, reject) => {
-      this._promise.then(
+      this[promise].then(
         r => {
           if (this._canceled) {
             p.cancel();
@@ -68,11 +71,11 @@ export default class CancelablePromise {
     return this.then(undefined, error);
   }
 
-  cancel(errorCallback) {
-    this._canceled = true;
-    if (errorCallback) {
-      this._promise.catch(errorCallback);
-    }
-    return this;
+  cancel(...args) {
+    if(!this.canceled) {
+      this[oncancel](...args);
+      this.canceled = true;
+      return true;
+    } else return false;
   }
 }
