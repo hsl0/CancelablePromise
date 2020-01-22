@@ -7,6 +7,7 @@ const handleCallback = (resolve, reject, callback, r) => {
 };
 const promise = Symbol('promise');
 const oncancel = Symbol('canceler');
+Symbol.childPromise = Symbol('Symbol.childPromise');
 
 export default class CancelablePromise {
   static all(iterable) {
@@ -34,29 +35,33 @@ export default class CancelablePromise {
   }
 
   constructor(executor, canceler) {
+    this[Symbol.childPromise] = this.constructor;
     this[promise] = new Promise(executor);
     this[oncancel] = canceler;
-    this.canceled = false;
+    Object.defineProperty(this, 'canceled', {
+      value: false,
+      configurable: true
+    });
   }
 
   then(success, error) {
-    const p = new CancelablePromise((resolve, reject) => {
+    const p = new this[Symbol.childPromise]((resolve, reject) => {
       this[promise].then(
         r => {
-          if (this._canceled) {
+          if (this.canceled) {
             p.cancel();
           }
-          if (success && !this._canceled) {
+          if (success && !this.canceled) {
             handleCallback(resolve, reject, success, r);
           } else {
             resolve(r);
           }
         },
         r => {
-          if (this._canceled) {
+          if (this.canceled) {
             p.cancel();
           }
-          if (error && !this._canceled) {
+          if (error && !this.canceled) {
             handleCallback(resolve, reject, error, r);
           } else {
             reject(r);
@@ -74,7 +79,9 @@ export default class CancelablePromise {
   cancel(...args) {
     if(!this.canceled) {
       this[oncancel](...args);
-      this.canceled = true;
+      Object.defineProperty(this, 'canceled', {
+        value: true
+      });
       return true;
     } else return false;
   }
